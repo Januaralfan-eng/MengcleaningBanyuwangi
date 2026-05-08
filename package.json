@@ -1,0 +1,15 @@
+{
+  "name": "mengcleaning-banyuwangi-public",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/fetch-live-build.mjs"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.3.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
