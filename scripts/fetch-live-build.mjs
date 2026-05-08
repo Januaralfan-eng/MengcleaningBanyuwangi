@@ -71,6 +71,7 @@ async function buildSnapshot(targetDir) {
 try {
   await buildSnapshot(BUILD_DIR);
   await fs.rm(OUT_DIR, { recursive: true, force: true });
+  await fs.mkdir(path.dirname(OUT_DIR), { recursive: true });
   await fs.rename(BUILD_DIR, OUT_DIR);
 } catch (error) {
   await fs.rm(BUILD_DIR, { recursive: true, force: true });
