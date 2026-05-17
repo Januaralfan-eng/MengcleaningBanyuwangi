@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/fetch-live-build.mjs"
+    "build": "node scripts/fetch-live-build.mjs && node scripts/inject-seo.mjs && node scripts/relax-booking-form.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.3.3"
