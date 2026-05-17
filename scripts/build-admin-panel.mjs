@@ -80,6 +80,25 @@ const HTML = `<!doctype html>
   .badge.green{background:#d1fae5;color:#065f46}
   .badge.amber{background:#fef3c7;color:#92400e}
   .badge.red{background:#fee2e2;color:#991b1b}
+  .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:flex-start;justify-content:center;padding:2rem 1rem;overflow-y:auto;z-index:40}
+  .modal-overlay.open{display:flex}
+  .modal{background:#fff;border-radius:.5rem;max-width:640px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.2)}
+  .modal-head{padding:1rem 1.25rem;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
+  .modal-head h3{margin:0;font-size:1.05rem}
+  .modal-close{background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6b7280;line-height:1}
+  .modal-body{padding:1.25rem}
+  .modal-foot{padding:1rem 1.25rem;border-top:1px solid #e5e7eb;display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end}
+  .field{display:flex;gap:.5rem;padding:.4rem 0;border-bottom:1px solid #f1f5f9;font-size:.875rem}
+  .field:last-child{border-bottom:0}
+  .field-label{flex:0 0 110px;color:#6b7280;font-weight:500}
+  .field-value{flex:1;color:#111827;word-break:break-word}
+  .field-value a{color:#0284c7;text-decoration:none}
+  .field-value a:hover{text-decoration:underline}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem}
+  .clickable{cursor:pointer;transition:background .12s}
+  .clickable:hover{background:#f3f4f6}
+  .section-title{margin:1.25rem 0 .5rem;padding-top:.5rem;border-top:1px solid #f1f5f9;font-size:.85rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em}
+  .section-title:first-child{border-top:0;padding-top:0;margin-top:0}
 </style>
 </head>
 <body>
@@ -123,6 +142,7 @@ const HTML = `<!doctype html>
       <div class="nav-section">Operasi</div>
       <button class="nav-item" data-tab="bookings" type="button">Booking</button>
       <button class="nav-item" data-tab="settings" type="button">Pengaturan</button>
+      <button class="nav-item" data-tab="admins" type="button">Daftar Admin</button>
     </nav>
   <main>
 
@@ -251,8 +271,37 @@ const HTML = `<!doctype html>
 
     <div id="panel-bookings" class="panel">
       <div class="card">
-        <h2>Booking Terbaru <span class="hint" id="booking-count"></span></h2>
+        <div class="toolbar">
+          <h2 style="margin:0">Booking <span class="hint" id="booking-count"></span></h2>
+          <div class="actions">
+            <select id="booking-filter" style="width:auto"><option value="">Semua status</option><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select>
+            <button class="ghost" type="button" id="booking-refresh">Refresh</button>
+            <button class="primary" type="button" id="booking-export">Export Excel</button>
+          </div>
+        </div>
         <div id="booking-list"><div class="empty">Memuat…</div></div>
+      </div>
+    </div>
+
+    <div id="panel-admins" class="panel">
+      <div class="card">
+        <h2 id="admins-form-title">Tambah Admin</h2>
+        <form id="admins-form">
+          <input type="hidden" id="admins-id" />
+          <div class="row2">
+            <div><label>Username</label><input id="admins-username" required maxlength="80" /></div>
+            <div><label>Password baru</label><input id="admins-password" type="password" maxlength="200" placeholder="kosongkan kalau tidak ganti (saat edit)" /></div>
+          </div>
+          <div class="hint">Password akan di-hash scrypt sebelum disimpan. Saat edit, kosongkan kalau tidak mau ganti password.</div>
+          <div class="actions">
+            <button class="primary" type="submit">Simpan</button>
+            <button class="ghost" type="button" data-reset="admins">Reset</button>
+          </div>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Daftar Admin <span class="hint" id="admins-count"></span></h2>
+        <div id="admins-list"><div class="empty">Memuat…</div></div>
       </div>
     </div>
 
@@ -307,11 +356,20 @@ const HTML = `<!doctype html>
           <div class="actions">
             <button class="primary" type="submit">Simpan Pengaturan</button>
             <button class="ghost" type="button" id="settings-reload">Muat Ulang</button>
+            <button class="danger" type="button" id="settings-reset" style="margin-left:auto">Reset Pengaturan</button>
           </div>
         </form>
       </div>
     </div>
   </main>
+  </div>
+</div>
+
+<div id="modal" class="modal-overlay" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-head"><h3 id="modal-title">Detail</h3><button class="modal-close" id="modal-close" type="button" aria-label="Tutup">×</button></div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot" id="modal-foot"></div>
   </div>
 </div>
 
@@ -436,7 +494,7 @@ const HTML = `<!doctype html>
   function switchTab(name) {
     document.querySelectorAll(".nav-item").forEach(x => x.classList.toggle("active", x.dataset.tab === name));
     document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === "panel-" + name));
-    const loaders = { faq: loadFaqs, services: loadServices, packages: loadPackages, blog: loadBlog, portfolio: loadPortfolio, bookings: loadBookings, settings: loadSettingsForm };
+    const loaders = { faq: loadFaqs, services: loadServices, packages: loadPackages, blog: loadBlog, portfolio: loadPortfolio, bookings: loadBookings, settings: loadSettingsForm, admins: loadAdmins };
     (loaders[name] || (()=>{}))();
     if (window.innerWidth <= 768) $("sidebar").classList.remove("open");
   }
@@ -451,7 +509,7 @@ const HTML = `<!doctype html>
     if (!form) return;
     form.reset();
     const idEl = $(kind + "-id"); if (idEl) idEl.value = "";
-    const titleEl = $(kind + "-form-title"); if (titleEl) titleEl.textContent = ({ faq: "Tambah FAQ", services: "Tambah Layanan", packages: "Tambah Paket", blog: "Tambah Artikel Blog", portfolio: "Tambah Portfolio" }[kind] || "Tambah");
+    const titleEl = $(kind + "-form-title"); if (titleEl) titleEl.textContent = ({ faq: "Tambah FAQ", services: "Tambah Layanan", packages: "Tambah Paket", blog: "Tambah Artikel Blog", portfolio: "Tambah Portfolio", admins: "Tambah Admin" }[kind] || "Tambah");
     if (kind === "blog") { $("blog-image-url").value=""; $("blog-image-preview").classList.add("hidden"); $("blog-image-preview").src=""; }
     if (kind === "portfolio") { $("portfolio-image-url").value=""; $("portfolio-image-preview").classList.add("hidden"); $("portfolio-image-preview").src=""; }
   }
@@ -696,23 +754,229 @@ const HTML = `<!doctype html>
   });
 
   // ===== BOOKINGS =====
+  let cachedBookings = [];
+
+  function lookupPackage(packageId) {
+    return (cachedContent && cachedContent.packages || []).find(p => Number(p.id) === Number(packageId));
+  }
+  function waLinkFor(phone) {
+    const wa = String(phone || "").replace(/\\D/g, "");
+    if (!wa) return "";
+    return "https://wa.me/" + (wa.startsWith("0") ? "62" + wa.slice(1) : wa);
+  }
+  function mapsLinkFor(b) {
+    if (b.mapsUrl) return b.mapsUrl;
+    if (Number.isFinite(b.latitude) && Number.isFinite(b.longitude)) return "https://www.google.com/maps?q=" + b.latitude + "," + b.longitude;
+    if (b.address) return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(b.address);
+    return "";
+  }
+
   async function loadBookings() {
     const list = $("booking-list"); list.innerHTML = '<div class="empty">Memuat…</div>';
     try {
+      await loadContent();
       const r = await api("/api/trpc/bookings.list");
-      const bookings = (r.result && r.result.data && r.result.data.json) || [];
-      $("booking-count").textContent = "(" + bookings.length + ")";
-      if (!bookings.length) { list.innerHTML = '<div class="empty">Belum ada booking.</div>'; return; }
-      list.innerHTML = bookings.map((b) => {
-        const date = b.date ? new Date(b.date).toLocaleString("id-ID") : "—";
-        const wa = (b.phone || "").replace(/\\D/g, "");
-        const waLink = wa ? '<a href="https://wa.me/' + (wa.startsWith("0") ? "62" + wa.slice(1) : wa) + '" target="_blank">WA</a>' : "";
-        const mapsLink = b.mapsUrl ? '<a href="' + ESC(b.mapsUrl) + '" target="_blank">Maps</a>' : "";
-        const statusClass = { pending:"amber", confirmed:"green", completed:"green", cancelled:"red" }[b.status] || "";
-        return '<div class="item"><div class="body"><div class="item-header"><div class="item-title">#' + ESC(b.id) + ' · ' + ESC(b.name || "(tanpa nama)") + ' <span class="badge ' + statusClass + '">' + ESC(b.status) + '</span></div><div style="font-size:.8rem;color:#6b7280">' + date + '</div></div><div class="item-body">' + 'Paket ID: ' + ESC(b.packageId) + (b.phone ? '<br>Telp: ' + ESC(b.phone) + ' ' + waLink : '') + (b.email ? '<br>Email: ' + ESC(b.email) : '') + (b.address ? '<br>Alamat: ' + ESC(b.address) + ' ' + mapsLink : '') + (b.notes ? '<br>Catatan: ' + ESC(b.notes) : '') + '</div></div></div>';
-      }).join("");
+      cachedBookings = (r.result && r.result.data && r.result.data.json) || [];
+      renderBookings();
     } catch (e) { list.innerHTML = '<div class="empty">Gagal: ' + ESC(e.message) + '</div>'; }
   }
+  function renderBookings() {
+    const list = $("booking-list");
+    const filter = $("booking-filter").value;
+    const filtered = filter ? cachedBookings.filter(b => b.status === filter) : cachedBookings;
+    $("booking-count").textContent = "(" + filtered.length + (filter ? " dari " + cachedBookings.length : "") + ")";
+    if (!filtered.length) { list.innerHTML = '<div class="empty">Tidak ada booking.</div>'; return; }
+    list.innerHTML = filtered.map((b) => {
+      const date = b.date ? new Date(b.date).toLocaleString("id-ID") : "—";
+      const pkg = lookupPackage(b.packageId);
+      const statusClass = { pending:"amber", confirmed:"green", completed:"green", cancelled:"red" }[b.status] || "";
+      return '<div class="item clickable" data-open-booking="' + ESC(b.id) + '"><div class="body"><div class="item-header"><div class="item-title">#' + ESC(b.id) + ' · ' + ESC(b.name || "(tanpa nama)") + ' <span class="badge ' + statusClass + '">' + ESC(b.status) + '</span></div><div style="font-size:.8rem;color:#6b7280">' + date + '</div></div><div class="item-meta">' + ESC(pkg ? pkg.name : "Paket #" + b.packageId) + (b.phone ? ' · ' + ESC(b.phone) : '') + '</div>' + (b.notes ? '<div class="item-body">' + ESC(b.notes.slice(0,120)) + (b.notes.length > 120 ? "…" : "") + '</div>' : '') + '</div></div>';
+    }).join("");
+    list.querySelectorAll("[data-open-booking]").forEach(el => el.addEventListener("click", () => openBookingDetail(el.dataset.openBooking)));
+  }
+  $("booking-filter").addEventListener("change", renderBookings);
+  $("booking-refresh").addEventListener("click", loadBookings);
+  $("booking-export").addEventListener("click", exportBookings);
+
+  function openBookingDetail(id) {
+    const b = cachedBookings.find(x => String(x.id) === String(id));
+    if (!b) return;
+    const pkg = lookupPackage(b.packageId);
+    const wa = waLinkFor(b.phone);
+    const maps = mapsLinkFor(b);
+    const statusClass = { pending:"amber", confirmed:"green", completed:"green", cancelled:"red" }[b.status] || "";
+    const fields = [
+      ["Nama", ESC(b.name) || '<span class="hint">—</span>'],
+      ["Telepon", b.phone ? ESC(b.phone) + (wa ? ' · <a href="' + wa + '" target="_blank">Hubungi WA</a>' : '') : '<span class="hint">—</span>'],
+      ["Email", b.email ? ESC(b.email) : '<span class="hint">—</span>'],
+      ["Alamat", b.address ? ESC(b.address) + (maps ? ' · <a href="' + maps + '" target="_blank">Arahkan ke Lokasi</a>' : '') : '<span class="hint">—</span>'],
+      ["Paket", pkg ? ESC(pkg.name) + ' · ' + fmtIDR(pkg.price) : 'Paket #' + ESC(b.packageId)],
+      ["Tanggal Layanan", b.date ? new Date(b.date).toLocaleString("id-ID") : '—'],
+      ["Dibuat", b.createdAt ? new Date(b.createdAt).toLocaleString("id-ID") : '—'],
+      ["Catatan", b.notes ? ESC(b.notes) : '<span class="hint">(tidak ada)</span>']
+    ];
+    $("modal-title").innerHTML = 'Booking #' + ESC(b.id) + ' <span class="badge ' + statusClass + '">' + ESC(b.status) + '</span>';
+    $("modal-body").innerHTML = fields.map(([k,v]) => '<div class="field"><div class="field-label">' + k + '</div><div class="field-value">' + v + '</div></div>').join("") +
+      '<div class="section-title">Update Status</div>' +
+      '<select id="modal-status"><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select>';
+    $("modal-status").value = b.status || "pending";
+    $("modal-foot").innerHTML =
+      '<button class="danger" id="modal-delete" type="button">Hapus</button>' +
+      '<button class="ghost" id="modal-update" type="button">Update Status</button>' +
+      (wa ? '<a class="ghost" href="' + wa + '" target="_blank" style="text-decoration:none;display:inline-block">Hubungi WA</a>' : '') +
+      (maps ? '<a class="ghost" href="' + maps + '" target="_blank" style="text-decoration:none;display:inline-block">Lihat Maps</a>' : '') +
+      '<button class="primary" id="modal-invoice" type="button">Cetak Invoice</button>';
+    $("modal-delete").addEventListener("click", () => deleteBooking(b.id));
+    $("modal-update").addEventListener("click", () => updateBookingStatus(b.id, $("modal-status").value));
+    $("modal-invoice").addEventListener("click", () => printInvoice(b));
+    openModal();
+  }
+
+  async function updateBookingStatus(id, status) {
+    try {
+      const c = await loadContent();
+      const list = (c.bookings || []).map(b => Number(b.id) === Number(id) ? { ...b, status } : b);
+      await saveContent({ ...c, bookings: list });
+      toast("Status diperbarui", "success");
+      closeModal();
+      loadBookings();
+    } catch (e) { toast(e.message, "error"); }
+  }
+  async function deleteBooking(id) {
+    if (!confirm("Hapus booking ini? Aksi tidak bisa dibatalkan.")) return;
+    try {
+      const c = await loadContent();
+      const list = (c.bookings || []).filter(b => Number(b.id) !== Number(id));
+      await saveContent({ ...c, bookings: list });
+      toast("Booking dihapus", "success");
+      closeModal();
+      loadBookings();
+    } catch (e) { toast(e.message, "error"); }
+  }
+
+  function printInvoice(b) {
+    const s = cachedSettings || {};
+    const pkg = lookupPackage(b.packageId);
+    const total = fmtIDR(pkg ? pkg.price : 0);
+    const maps = mapsLinkFor(b);
+    const primaryColor = s.primaryColor || "#00A499";
+    const html = '<!doctype html><html><head><meta charset="UTF-8"/><title>Invoice ' + ESC(s.brandName || "") + ' - #' + ESC(b.id) + '</title><style>' +
+      'body{font-family:Arial,sans-serif;color:#0f172a;margin:0;padding:40px}' +
+      '.header{display:flex;justify-content:space-between;gap:24px;border-bottom:2px solid #e2e8f0;padding-bottom:24px;margin-bottom:28px}' +
+      '.brand{display:flex;gap:14px;align-items:center}' +
+      '.brand img{width:56px;height:56px;object-fit:cover;border-radius:8px}' +
+      'h1,h2,h3,p{margin:0}h1{font-size:28px}' +
+      '.muted{color:#64748b;margin-top:6px;font-size:14px}' +
+      '.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:28px}' +
+      '.box{border:1px solid #e2e8f0;border-radius:8px;padding:18px}' +
+      '.box h3{font-size:13px;color:#334155;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em}' +
+      '.row{display:flex;justify-content:space-between;border-bottom:1px solid #e2e8f0;padding:12px 0}' +
+      '.row:last-child{border-bottom:0}' +
+      '.total{font-size:22px;font-weight:700;color:' + primaryColor + '}' +
+      '.status{display:inline-block;padding:6px 12px;border-radius:999px;background:#dcfce7;color:#166534;font-weight:700;text-transform:uppercase;font-size:12px}' +
+      '.print-btn{position:fixed;top:10px;right:10px;padding:8px 16px;background:' + primaryColor + ';color:#fff;border:none;border-radius:6px;cursor:pointer}' +
+      '@media print{body{padding:24px}.print-btn{display:none}}' +
+      '</style></head><body>' +
+      '<button class="print-btn" onclick="window.print()">Cetak / Print</button>' +
+      '<div class="header"><div class="brand">' + (s.logoUrl ? '<img src="' + ESC(s.logoUrl) + '" alt="Logo"/>' : '') + '<div><h1>' + ESC(s.brandName || "Meng-Cleaning") + '</h1><p class="muted">' + ESC(s.email || "") + (s.whatsapp ? ' · ' + ESC(s.whatsapp) : '') + '</p></div></div>' +
+      '<div style="text-align:right"><h2>INVOICE</h2><p class="muted">INV-' + ESC(b.id) + '</p><p class="muted">' + new Date().toLocaleDateString("id-ID") + '</p></div></div>' +
+      '<div class="grid">' +
+      '<div class="box"><h3>Customer</h3><p class="muted"><strong>' + ESC(b.name || "(tanpa nama)") + '</strong></p>' + (b.email ? '<p class="muted">' + ESC(b.email) + '</p>' : '') + (b.phone ? '<p class="muted">' + ESC(b.phone) + '</p>' : '') + (b.address ? '<p class="muted">' + ESC(b.address) + '</p>' : '') + (maps ? '<p class="muted"><a href="' + ESC(maps) + '" target="_blank">' + ESC(maps) + '</a></p>' : '') + '</div>' +
+      '<div class="box"><h3>Layanan</h3><p class="muted"><strong>' + ESC(pkg ? pkg.name : "Paket #" + b.packageId) + '</strong></p>' + (pkg && pkg.duration ? '<p class="muted">Durasi: ' + ESC(pkg.duration) + '</p>' : '') + '<p class="muted">Tanggal: ' + new Date(b.date || b.createdAt || Date.now()).toLocaleDateString("id-ID") + '</p><p class="muted">Status: <span class="status">' + ESC(b.status || "pending") + '</span></p></div>' +
+      '</div>' +
+      '<div class="box">' +
+      '<div class="row"><div>' + ESC(pkg ? pkg.name : "Paket #" + b.packageId) + '</div><div>' + total + '</div></div>' +
+      '<div class="row"><div><strong>Total</strong></div><div class="total">' + total + '</div></div>' +
+      '</div>' +
+      (b.notes ? '<div class="box" style="margin-top:24px"><h3>Catatan</h3><p class="muted">' + ESC(b.notes) + '</p></div>' : '') +
+      '<p class="muted" style="margin-top:32px;text-align:center">Terima kasih telah memilih ' + ESC(s.brandName || "kami") + '.</p>' +
+      '</body></html>';
+    const w = window.open("", "_blank", "width=900,height=700");
+    if (!w) { toast("Popup invoice diblokir browser. Aktifkan popup untuk situs ini.", "error"); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+
+  function exportBookings() {
+    if (!cachedBookings.length) { toast("Belum ada booking untuk diexport.", "error"); return; }
+    const headers = ["ID","Nama","Email","WhatsApp","Alamat","Maps","Paket","Tanggal","Status","Catatan","Total"];
+    const rows = cachedBookings.map(b => {
+      const pkg = lookupPackage(b.packageId);
+      return [b.id, b.name||"", b.email||"", b.phone||"", b.address||"", mapsLinkFor(b)||"", pkg ? pkg.name : "Paket #" + b.packageId, b.date ? new Date(b.date).toLocaleDateString("id-ID") : "", b.status||"pending", b.notes||"", fmtIDR(pkg?pkg.price:0)];
+    });
+    const html = '<!doctype html><html><head><meta charset="UTF-8"/></head><body><table border="1">' +
+      [headers, ...rows].map(r => '<tr>' + r.map(c => '<td>' + ESC(c) + '</td>').join("") + '</tr>').join("") + '</table></body></html>';
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "pemesanan-" + new Date().toISOString().slice(0,10) + ".xls"; a.click();
+    URL.revokeObjectURL(url);
+    toast("File Excel diunduh", "success");
+  }
+
+  // ===== MODAL =====
+  function openModal() { $("modal").classList.add("open"); document.body.style.overflow = "hidden"; }
+  function closeModal() { $("modal").classList.remove("open"); document.body.style.overflow = ""; }
+  $("modal-close").addEventListener("click", closeModal);
+  $("modal").addEventListener("click", (e) => { if (e.target.id === "modal") closeModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+  // ===== ADMIN MANAGEMENT =====
+  async function loadAdmins() {
+    const list = $("admins-list"); list.innerHTML = '<div class="empty">Memuat…</div>';
+    try {
+      const c = await loadContent();
+      const items = Array.isArray(c.adminAccounts) ? c.adminAccounts : [];
+      $("admins-count").textContent = "(" + items.length + ")";
+      if (!items.length) { list.innerHTML = '<div class="empty">Belum ada admin.</div>'; return; }
+      list.innerHTML = items.map((a) => '<div class="item"><div class="body"><div class="item-header"><div class="item-title">' + ESC(a.username) + ' <span class="badge">' + (a.hasPassword ? 'aktif' : 'tanpa password') + '</span></div><div class="actions"><button class="ghost" data-edit-admins="' + ESC(a.id) + '" type="button">Ganti Password</button><button class="danger" data-del-admins="' + ESC(a.id) + '" type="button">Hapus</button></div></div><div class="item-meta">' + ESC(a.id) + '</div></div></div>').join("");
+      list.querySelectorAll("[data-edit-admins]").forEach((b) => b.addEventListener("click", () => editAdmin(b.dataset.editAdmins)));
+      list.querySelectorAll("[data-del-admins]").forEach((b) => b.addEventListener("click", () => delAdmin(b.dataset.delAdmins)));
+    } catch (e) { list.innerHTML = '<div class="empty">Gagal: ' + ESC(e.message) + '</div>'; }
+  }
+  function editAdmin(id) {
+    const a = (cachedContent.adminAccounts||[]).find(x => String(x.id) === String(id)); if (!a) return;
+    $("admins-id").value = a.id; $("admins-username").value = a.username||""; $("admins-password").value = "";
+    $("admins-form-title").textContent = "Edit Admin: " + a.username;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  async function delAdmin(id) {
+    if (!confirm("Hapus akun admin ini?")) return;
+    try { const c = await loadContent(); await saveContent({ ...c, adminAccounts: (c.adminAccounts||[]).filter(a => String(a.id) !== String(id)) }); toast("Admin dihapus","success"); loadAdmins(); } catch(e){ toast(e.message,"error"); }
+  }
+  async function hashPasswordClient(plain) {
+    // Use Web Crypto to derive a key via PBKDF2 then format like scrypt$ … no, we need scrypt match server.
+    // Browser can't do scrypt easily without lib. Send plain to server endpoint to hash, or store plain
+    // temporarily and let server hash on next read. Simpler: keep plain in blob — verifyPassword on
+    // server will reject (only scrypt$). So we POST to a small hash endpoint? Not implemented yet.
+    // Workaround: hash on server-side via a dedicated endpoint we add.
+    const r = await api("/api/admin-hash", { method: "POST", body: JSON.stringify({ password: plain }) });
+    return r.hash;
+  }
+  $("admins-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = $("admins-id").value.trim();
+    const username = $("admins-username").value.trim();
+    const password = $("admins-password").value;
+    if (!username) return toast("Username wajib diisi", "error");
+    if (!id && !password) return toast("Password wajib diisi untuk admin baru", "error");
+    try {
+      const c = await loadContent();
+      const list = Array.isArray(c.adminAccounts) ? c.adminAccounts.slice() : [];
+      let hashedPassword = "";
+      if (password) {
+        hashedPassword = await hashPasswordClient(password);
+      }
+      if (id) {
+        const i = list.findIndex(a => String(a.id) === String(id));
+        if (i >= 0) list[i] = { ...list[i], username, ...(hashedPassword ? { password: hashedPassword } : {}) };
+      } else {
+        list.push({ id: "admin-" + Date.now(), username, password: hashedPassword });
+      }
+      await saveContent({ ...c, adminAccounts: list });
+      toast(id ? "Admin diperbarui" : "Admin ditambahkan", "success");
+      resetForm("admins"); loadAdmins();
+    } catch(e){ toast(e.message, "error"); }
+  });
 
   // ===== SETTINGS =====
   async function loadSettingsForm() {
@@ -737,6 +1001,18 @@ const HTML = `<!doctype html>
     });
   });
   $("settings-reload").addEventListener("click", loadSettingsForm);
+  $("settings-reset").addEventListener("click", async () => {
+    if (!confirm("Reset SEMUA pengaturan ke default? (logo, hero, warna, kontak, sosmed)")) return;
+    try {
+      const r = await fetch("/api/site-settings", {
+        method: "DELETE",
+        headers: { "content-type": "application/json", authorization: "Bearer " + token() },
+        body: JSON.stringify({ auth: { token: token() } })
+      });
+      if (!r.ok) { const d = await r.json().catch(()=>({})); throw new Error(d.error || "HTTP " + r.status); }
+      toast("Pengaturan direset ke default", "success"); loadSettingsForm();
+    } catch (e) { toast(e.message, "error"); }
+  });
   $("settings-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const settings = {};
