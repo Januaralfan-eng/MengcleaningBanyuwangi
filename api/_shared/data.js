@@ -166,7 +166,7 @@ async function writeBlob(pathName, data) {
   if (!hasBlobToken()) return false;
   try {
     await put(pathName, JSON.stringify(data), {
-      access: "public",
+      access: "private",
       allowOverwrite: true,
       addRandomSuffix: false,
       cacheControlMaxAge: 60,
