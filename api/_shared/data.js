@@ -149,7 +149,10 @@ async function readBlob(pathName, fallback, normalize) {
     const { blobs } = await list({ prefix: pathName, limit: 5 });
     const blob = blobs.find((b) => b.pathname === pathName);
     if (!blob) return { data: fallback, source: "blob-empty", persistent: true };
-    const response = await fetch(blob.url, { cache: "no-store" });
+    const response = await fetch(blob.url, {
+      cache: "no-store",
+      headers: { authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}` }
+    });
     if (!response.ok) throw new Error(`fetch ${blob.url} -> ${response.status}`);
     const json = await response.json();
     return { data: normalize(json), source: "blob", persistent: true };
