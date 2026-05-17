@@ -775,6 +775,7 @@ const HTML = `<!doctype html>
     const list = $("booking-list"); list.innerHTML = '<div class="empty">Memuat…</div>';
     try {
       await loadContent();
+      if (!cachedSettings) { try { await loadSettings(); } catch (e) {} }
       const r = await api("/api/trpc/bookings.list");
       cachedBookings = (r.result && r.result.data && r.result.data.json) || [];
       renderBookings();
@@ -854,7 +855,10 @@ const HTML = `<!doctype html>
     } catch (e) { toast(e.message, "error"); }
   }
 
-  function printInvoice(b) {
+  async function printInvoice(b) {
+    if (!cachedSettings) {
+      try { await loadSettings(); } catch (e) { /* fall through with empty settings */ }
+    }
     const s = cachedSettings || {};
     const pkg = lookupPackage(b.packageId);
     const total = fmtIDR(pkg ? pkg.price : 0);
