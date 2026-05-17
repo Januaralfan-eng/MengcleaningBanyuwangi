@@ -63,6 +63,7 @@ function buildSeoBlock() {
 
   return [
     SEO_BLOCK_START,
+    `    <meta name="google-site-verification" content="l3QZwZRcF8gH8YfXXZFmMfRFu6KxGRmE0yWVv4N88wE" />`,
     `    <meta name="description" content="${DESCRIPTION}" />`,
     `    <meta name="keywords" content="${KEYWORDS}" />`,
     `    <meta name="robots" content="index, follow, max-image-preview:large" />`,
